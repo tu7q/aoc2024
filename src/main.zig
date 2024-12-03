@@ -2,6 +2,7 @@ const std = @import("std");
 
 const day1 = @import("day1.zig");
 const day2 = @import("day2.zig");
+const day3 = @import("day3.zig");
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
@@ -13,4 +14,8 @@ pub fn main() !void {
     std.debug.print("day 2 solutions:\n", .{});
     try day2.ppSolutionOne(allocator);
     try day2.ppSolutionTwo(allocator);
+
+    std.debug.print("day 3 solutions:\n", .{});
+    try day3.ppSolutionOne(allocator);
+    try day3.ppSolutionTwo(allocator);
 }
