@@ -24,9 +24,9 @@ pub fn main() !void {
     try day3.ppSolutionOne(stdout, allocator);
     try day3.ppSolutionTwo(stdout, allocator);
 
-    // std.debug.print("day 4 solutions:\n", .{});
-    // try day4.ppSolutionOne(stdout, allocator);
-    // try day4.ppSolutionTwo(stdout, allocator);
+    std.debug.print("day 4 solutions:\n", .{});
+    try day4.ppSolutionOne(stdout, allocator);
+    try day4.ppSolutionTwo(stdout, allocator);
 
     try bw.flush();
 }
