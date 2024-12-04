@@ -11,9 +11,9 @@ fn nextNumber(buffer: []u8) ?[]u8 {
 }
 
 // Pretty Print Solution
-pub fn ppSolutionOne(allocator: Allocator) !void {
+pub fn ppSolutionOne(writer: anytype, allocator: Allocator) !void {
     const result = try solutionOne(allocator);
-    std.debug.print("accumulated sum: {d}\n", .{result});
+    try writer.print("accumulated sum: {d}\n", .{result});
 }
 
 pub fn solutionOne(allocator: Allocator) !u32 {
@@ -52,9 +52,9 @@ pub fn solutionOne(allocator: Allocator) !u32 {
     return accumulator;
 }
 
-pub fn ppSolutionTwo(allocator: Allocator) !void {
+pub fn ppSolutionTwo(writer: anytype, allocator: Allocator) !void {
     const result = try solutionTwo(allocator);
-    std.debug.print("accumulated sum (with do's/don'ts): {d}\n", .{result});
+    try writer.print("accumulated sum (with do's/don'ts): {d}\n", .{result});
 }
 
 pub fn solutionTwo(allocator: Allocator) !u32 {

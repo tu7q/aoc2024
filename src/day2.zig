@@ -2,9 +2,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 // Pretty Print Solution
-pub fn ppSolutionOne(allocator: Allocator) !void {
+pub fn ppSolutionOne(writer: anytype, allocator: Allocator) !void {
     const result = try solutionOne(allocator);
-    std.debug.print("safe reports: {d}\n", .{result});
+    try writer.print("safe reports: {d}\n", .{result});
 }
 
 pub fn solutionOne(allocator: Allocator) !u32 {
@@ -34,9 +34,9 @@ pub fn solutionOne(allocator: Allocator) !u32 {
     return safe_reports;
 }
 
-pub fn ppSolutionTwo(allocator: Allocator) !void {
+pub fn ppSolutionTwo(writer: anytype, allocator: Allocator) !void {
     const result = try solutionTwo(allocator);
-    std.debug.print("safe reports: {d}\n", .{result});
+    try writer.print("safe reports: {d}\n", .{result});
 }
 
 pub fn solutionTwo(allocator: Allocator) !u32 {
