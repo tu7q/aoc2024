@@ -8,9 +8,130 @@ const Direction = enum {
     East,
 };
 
+// Doesn't compile with
+// const Vec2 = struct {
 const Vec2 = struct {
     x: u32,
     y: u32,
+};
+
+const Bounds = struct {
+    min_x: u32,
+    min_y: u32,
+    max_x: u32,
+    max_y: u32,
+
+    pub fn contains(self: @This(), p: Vec2) bool {
+        if (p.x >= self.min_x and p.x <= self.max_x and p.y >= self.min_y and p.y <= self.max_y) {
+            return true;
+        }
+        return false;
+    }
+};
+
+const PathElem = struct {
+    dir: Direction,
+    loc: Vec2,
+};
+
+fn findPath(allocator: Allocator, origin: Vec2, origin_dir: Direction, obstructions: [][]bool, bounds: Bounds) !?[]PathElem {
+    var path = std.ArrayList(PathElem).init(allocator);
+
+    var seen = std.AutoHashMap(PathElem, void).init(allocator);
+    defer seen.deinit();
+
+    var current = origin;
+    var facing = origin_dir;
+
+    while (bounds.contains(current)) {
+        const next = switch (facing) {
+            .North => Vec2{ .x = current.x, .y = current.y - 1 },
+            .East => Vec2{ .x = current.x + 1, .y = current.y },
+            .South => Vec2{ .x = current.x, .y = current.y + 1 },
+            .West => Vec2{ .x = current.x - 1, .y = current.y },
+        };
+        if (bounds.contains(next) and obstructions[next.y - bounds.min_y][next.x - bounds.min_x]) {
+            switch (facing) {
+                .North => facing = .East,
+                .East => facing = .South,
+                .South => facing = .West,
+                .West => facing = .North,
+            }
+        } else {
+            const elem = PathElem{ .loc = current, .dir = facing };
+            if ((try seen.getOrPut(elem)).found_existing) return null;
+            try path.append(elem);
+
+            current = next;
+        }
+    }
+
+    return try path.toOwnedSlice();
+}
+
+const ProblemInput = struct {
+    guard: Vec2,
+    facing: Direction,
+    obstructions: [][]bool,
+    bounds: Bounds,
+
+    pub fn readInput(allocator: Allocator, file: std.fs.File) !@This() {
+        var reader = file.reader();
+        var buf: [1024]u8 = undefined;
+
+        var obstructions = std.ArrayList([]bool).init(allocator);
+
+        var guard: Vec2 = undefined;
+        var facing: Direction = undefined;
+
+        var bounds: Bounds = .{
+            .min_x = 1,
+            .min_y = 1,
+            .max_x = undefined,
+            .max_y = undefined,
+        };
+
+        var y: u32 = bounds.min_y;
+        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line_lf| : (y += 1) {
+            const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
+            if (line.len == 0) break;
+
+            bounds.max_x = @intCast(line.len);
+
+            {
+                const line_obstructions = try allocator.alloc(bool, line.len);
+                @memset(line_obstructions, false);
+                try obstructions.append(line_obstructions);
+            }
+
+            for (line, bounds.min_x..) |char, x| {
+                switch (char) {
+                    '#' => obstructions.items[y - bounds.min_y][x - bounds.min_x] = true,
+                    '^' => {
+                        guard = .{ .x = @intCast(x), .y = y };
+                        facing = .North;
+                    },
+                    '.' => {},
+                    else => unreachable,
+                }
+            }
+        }
+        bounds.max_y = y - 1;
+
+        return .{
+            .guard = guard,
+            .facing = facing,
+            .obstructions = try obstructions.toOwnedSlice(),
+            .bounds = bounds,
+        };
+    }
+
+    pub fn deinit(self: @This(), allocator: Allocator) void {
+        for (self.obstructions) |line_obs| {
+            allocator.free(line_obs);
+        }
+        allocator.free(self.obstructions);
+    }
 };
 
 // Pretty Print Solution
@@ -24,60 +145,23 @@ pub fn solutionOne(allocator: Allocator) !u32 {
     const file = try std.fs.cwd().openFile("puzzle_input/day6.txt", .{});
     defer file.close();
 
-    var reader = file.reader();
-    var buf: [1024]u8 = undefined;
+    const input = try ProblemInput.readInput(allocator, file);
+    defer input.deinit(allocator);
 
-    var obstructions = std.AutoArrayHashMap(Vec2, void).init(allocator);
-    defer obstructions.deinit();
-
-    var guard: Vec2 = undefined;
-    var guard_direction: Direction = undefined;
-
-    var width: u32 = undefined;
-
-    var y: u32 = 1;
-    while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line_lf| : (y += 1) {
-        const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
-
-        width = @intCast(line.len);
-
-        for (line, 1..) |char, x| {
-            switch (char) {
-                '#' => try obstructions.put(Vec2{ .x = @intCast(x), .y = y }, {}),
-                '^' => {
-                    guard = .{ .x = @intCast(x), .y = y };
-                    guard_direction = .North;
-                },
-                else => {},
-            }
-        }
-    }
-
-    const height = y - 1;
+    const path = (try findPath(
+        allocator,
+        input.guard,
+        input.facing,
+        input.obstructions,
+        input.bounds,
+    )).?;
+    defer allocator.free(path);
 
     var distinct_positions = std.AutoArrayHashMap(Vec2, void).init(allocator);
     defer distinct_positions.deinit();
 
-    while (guard.x > 0 and guard.x <= width and guard.y > 0 and guard.y <= height) {
-        try distinct_positions.put(guard, {});
-
-        const new_pos = switch (guard_direction) {
-            .North => Vec2{ .x = guard.x, .y = guard.y - 1 },
-            .East => Vec2{ .x = guard.x + 1, .y = guard.y },
-            .South => Vec2{ .x = guard.x, .y = guard.y + 1 },
-            .West => Vec2{ .x = guard.x - 1, .y = guard.y },
-        };
-        if (obstructions.contains(new_pos)) {
-            // Rotate to the right.
-            switch (guard_direction) {
-                .North => guard_direction = .East,
-                .East => guard_direction = .South,
-                .South => guard_direction = .West,
-                .West => guard_direction = .North,
-            }
-        } else {
-            guard = new_pos;
-        }
+    for (path) |elem| {
+        try distinct_positions.put(elem.loc, {});
     }
 
     return @intCast(distinct_positions.count());
@@ -88,91 +172,47 @@ pub fn ppSolutionTwo(writer: anytype, allocator: Allocator) !void {
     try writer.print("different positions to cause loop: {d}\n", .{result});
 }
 
-// Most spaghetti code you will ever read. (also kinda slow.)
 pub fn solutionTwo(allocator: Allocator) !u32 {
     const file = try std.fs.cwd().openFile("puzzle_input/day6.txt", .{});
     defer file.close();
 
-    var reader = file.reader();
-    var buf: [1024]u8 = undefined;
+    const input = try ProblemInput.readInput(allocator, file);
+    defer input.deinit(allocator);
 
-    var obstructions = std.AutoArrayHashMap(Vec2, void).init(allocator);
-    defer obstructions.deinit();
+    const path = (try findPath(
+        allocator,
+        input.guard,
+        input.facing,
+        input.obstructions,
+        input.bounds,
+    )).?;
+    defer allocator.free(path);
 
-    var guard_initial: Vec2 = undefined;
-    var guard_direction_initial: Direction = undefined;
+    var cycles: u32 = 0;
 
-    var width: u32 = undefined;
+    var distinct_positions = std.AutoArrayHashMap(Vec2, void).init(allocator);
+    defer distinct_positions.deinit();
 
-    var y: u32 = 1;
-    while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line_lf| : (y += 1) {
-        const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
+    var it = std.mem.window(PathElem, path, 2, 1);
+    while (it.next()) |elems| {
+        const x = elems[1].loc.x - input.bounds.min_x;
+        const y = elems[1].loc.y - input.bounds.min_y;
 
-        width = @intCast(line.len);
-
-        for (line, 1..) |char, x| {
-            switch (char) {
-                '#' => try obstructions.put(Vec2{ .x = @intCast(x), .y = y }, {}),
-                '^' => {
-                    guard_initial = .{ .x = @intCast(x), .y = y };
-                    guard_direction_initial = .North;
-                },
-                else => {},
-            }
+        if (distinct_positions.contains(Vec2{ .x = x, .y = y })) {
+            continue;
         }
+
+        input.obstructions[y][x] = true;
+        defer input.obstructions[y][x] = false;
+
+        if (try findPath(allocator, elems[0].loc, elems[0].dir, input.obstructions, input.bounds)) |p| {
+            allocator.free(p);
+        } else {
+            cycles += 1;
+        }
+
+        try distinct_positions.put(Vec2{ .x = x, .y = y }, {});
     }
 
-    const height = y - 1;
-
-    var obstruction_causes_loop: u32 = 0;
-
-    for (1..width + 1) |x_ob| {
-        for (1..height + 1) |y_ob| {
-            const new_obstruction = Vec2{ .x = @intCast(x_ob), .y = @intCast(y_ob) };
-            if (obstructions.contains(new_obstruction)) continue;
-
-            try obstructions.put(new_obstruction, {});
-            defer _ = obstructions.swapRemove(new_obstruction);
-
-            const T = struct {
-                dir: Direction,
-                pos: Vec2,
-            };
-
-            var distinct_positions = std.AutoArrayHashMap(T, void).init(allocator);
-            defer distinct_positions.deinit();
-
-            var guard = guard_initial;
-            var guard_direction = guard_direction_initial;
-
-            while (guard.x > 0 and guard.x <= width and guard.y > 0 and guard.y <= height) {
-                const key = T{ .dir = guard_direction, .pos = guard };
-                if (distinct_positions.contains(key)) {
-                    obstruction_causes_loop += 1;
-                    break;
-                }
-                try distinct_positions.put(key, {});
-
-                const new_pos = switch (guard_direction) {
-                    .North => Vec2{ .x = guard.x, .y = guard.y - 1 },
-                    .East => Vec2{ .x = guard.x + 1, .y = guard.y },
-                    .South => Vec2{ .x = guard.x, .y = guard.y + 1 },
-                    .West => Vec2{ .x = guard.x - 1, .y = guard.y },
-                };
-                if (obstructions.contains(new_pos)) {
-                    // Rotate to the right.
-                    switch (guard_direction) {
-                        .North => guard_direction = .East,
-                        .East => guard_direction = .South,
-                        .South => guard_direction = .West,
-                        .West => guard_direction = .North,
-                    }
-                } else {
-                    guard = new_pos;
-                }
-            }
-        }
-    }
-
-    return obstruction_causes_loop;
+    return cycles;
 }
