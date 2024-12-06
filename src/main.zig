@@ -13,21 +13,21 @@ pub fn main() !void {
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
-    // try stdout.print("day 1 solutions:\n", .{});
-    // try day1.ppSolutionOne(stdout, allocator);
-    // try day1.ppSolutionTwo(stdout, allocator);
+    try stdout.print("day 1 solutions:\n", .{});
+    try day1.ppSolutionOne(stdout, allocator);
+    try day1.ppSolutionTwo(stdout, allocator);
 
-    // try stdout.print("day 2 solutions:\n", .{});
-    // try day2.ppSolutionOne(stdout, allocator);
-    // try day2.ppSolutionTwo(stdout, allocator);
+    try stdout.print("day 2 solutions:\n", .{});
+    try day2.ppSolutionOne(stdout, allocator);
+    try day2.ppSolutionTwo(stdout, allocator);
 
-    // try stdout.print("day 3 solutions:\n", .{});
-    // try day3.ppSolutionOne(stdout, allocator);
-    // try day3.ppSolutionTwo(stdout, allocator);
+    try stdout.print("day 3 solutions:\n", .{});
+    try day3.ppSolutionOne(stdout, allocator);
+    try day3.ppSolutionTwo(stdout, allocator);
 
-    // std.debug.print("day 4 solutions:\n", .{});
-    // try day4.ppSolutionOne(stdout, allocator);
-    // try day4.ppSolutionTwo(stdout, allocator);
+    std.debug.print("day 4 solutions:\n", .{});
+    try day4.ppSolutionOne(stdout, allocator);
+    try day4.ppSolutionTwo(stdout, allocator);
 
     std.debug.print("day 5 solutions:\n", .{});
     try day5.ppSolutionOne(stdout, allocator);

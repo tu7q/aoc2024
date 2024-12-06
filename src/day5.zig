@@ -1,23 +1,95 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-// TODO: Need to do a refactor on this solution.
+// Note that all values in the dataset lie between [0, 98].
+const AdjacencyMatrix = [100][100]u1;
+// If there is an edge from vertex i to j then adjMat[i][j] == 1 otherwise adjMat[i][j] == 0.
 
-fn orderedCorrectly(allocator: Allocator, rules: std.AutoArrayHashMap(u32, std.ArrayList(u32)), order: []u32) !bool {
-    var banned = std.ArrayList(u32).init(allocator);
-    defer banned.deinit();
-
-    for (order) |page| {
-        if (std.mem.containsAtLeast(u32, banned.items, 1, &[_]u32{page})) {
-            return false;
+// Rules represents each incoming edge.
+fn kahn_sort(allocator: Allocator, sequence: []u32, rules: *AdjacencyMatrix) ![]u32 {
+    var restore = std.ArrayList([2]u32).init(allocator);
+    defer {
+        for (restore.items) |v| {
+            rules[v[0]][v[1]] = 1;
         }
+        restore.deinit();
+    }
 
-        if (rules.get(page)) |required| {
-            try banned.appendSlice(required.items);
+    var L = std.ArrayList(u32).init(allocator);
+    var S = std.ArrayList(u32).init(allocator);
+    defer S.deinit();
+
+    for (sequence) |n| {
+        for (0..rules.len) |i| {
+            if (!std.mem.containsAtLeast(u32, sequence, 1, &[_]u32{@intCast(i)})) continue;
+            if (rules[i][n] != 0) break;
+        } else {
+            try S.append(n);
         }
     }
 
-    return true;
+    while (S.items.len != 0) {
+        const n = S.pop();
+        try L.append(n);
+
+        for (sequence) |m| {
+            if (rules[n][m] == 0) continue;
+            rules[n][m] = 0;
+            try restore.append([2]u32{ n, m });
+            for (0..rules.len) |j| {
+                if (!std.mem.containsAtLeast(u32, sequence, 1, &[_]u32{@intCast(j)})) continue;
+                if (rules[j][m] != 0) break;
+            } else {
+                try S.append(m);
+            }
+        }
+    }
+
+    return try L.toOwnedSlice();
+}
+
+const ProblemInput = struct {
+    graph: AdjacencyMatrix,
+    updates: [][]u32,
+};
+
+fn readInput(allocator: Allocator, file: std.fs.File) !ProblemInput {
+    var reader = file.reader();
+    var buffer: [1024]u8 = undefined;
+
+    var rules: AdjacencyMatrix = std.mem.zeroes(AdjacencyMatrix);
+
+    while (try reader.readUntilDelimiterOrEof(&buffer, '\n')) |line_lf| {
+        const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
+        if (line.len == 0) break;
+
+        var it = std.mem.splitScalar(u8, line, '|');
+        const before = try std.fmt.parseUnsigned(u32, it.next().?, 10);
+        const after = try std.fmt.parseUnsigned(u32, it.next().?, 10);
+
+        rules[before][after] = 1;
+    }
+
+    var updates = std.ArrayList([]u32).init(allocator);
+
+    while (try reader.readUntilDelimiterOrEof(&buffer, '\n')) |line_lf| {
+        const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
+
+        var update = std.ArrayList(u32).init(allocator);
+
+        var it = std.mem.splitScalar(u8, line, ',');
+        while (it.next()) |str| {
+            const page = try std.fmt.parseUnsigned(u32, str, 10);
+            try update.append(page);
+        }
+
+        try updates.append(try update.toOwnedSlice());
+    }
+
+    return .{
+        .graph = rules,
+        .updates = try updates.toOwnedSlice(),
+    };
 }
 
 // Pretty Print Solution
@@ -27,62 +99,20 @@ pub fn ppSolutionOne(writer: anytype, allocator: Allocator) !void {
 }
 
 pub fn solutionOne(allocator: Allocator) !u32 {
-    var accumulator: u32 = 0;
-
-    var rules = std.AutoArrayHashMap(u32, std.ArrayList(u32)).init(allocator);
-    defer {
-        for (rules.values()) |v| v.deinit();
-        rules.deinit();
-    }
-
     const file = try std.fs.cwd().openFile("puzzle_input/day5.txt", .{});
     defer file.close();
 
-    var reader = file.reader();
-    var buffer: [1024]u8 = undefined;
+    var input = try readInput(allocator, file);
+    var accumulator: u32 = 0;
 
-    while (try reader.readUntilDelimiterOrEof(&buffer, '\n')) |line_lf| {
-        const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
-        if (line.len == 0) break;
-
-        var it = std.mem.splitScalar(u8, line, '|');
-        const before = try std.fmt.parseUnsigned(u32, it.next().?, 10);
-        const after = try std.fmt.parseUnsigned(u32, it.next().?, 10);
-
-        const entry = try rules.getOrPut(after);
-        if (!entry.found_existing) {
-            entry.value_ptr.* = std.ArrayList(u32).init(allocator);
-        }
-        try entry.value_ptr.*.append(before);
-    }
-
-    while (try reader.readUntilDelimiterOrEof(&buffer, '\n')) |line_lf| {
-        const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
-
-        var order = std.ArrayList(u32).init(allocator);
-        defer order.deinit();
-
-        var it = std.mem.splitScalar(u8, line, ',');
-        while (it.next()) |str| {
-            const page = try std.fmt.parseUnsigned(u32, str, 10);
-            try order.append(page);
-        }
-
-        if (try orderedCorrectly(allocator, rules, order.items)) {
-            accumulator += order.items[order.items.len / 2];
+    for (input.updates) |update| {
+        const sorted = try kahn_sort(allocator, update, &input.graph);
+        if (std.mem.eql(u32, sorted, update)) {
+            accumulator += update[update.len / 2];
         }
     }
 
     return accumulator;
-}
-
-fn intersects(a: []u32, b: []u32) ?usize {
-    for (a, 0..) |a_, i| {
-        for (b) |b_| {
-            if (a_ == b_) return i;
-        }
-    }
-    return null;
 }
 
 pub fn ppSolutionTwo(writer: anytype, allocator: Allocator) !void {
@@ -91,77 +121,17 @@ pub fn ppSolutionTwo(writer: anytype, allocator: Allocator) !void {
 }
 
 pub fn solutionTwo(allocator: Allocator) !u32 {
-    var accumulator: u32 = 0;
-
-    var rules = std.AutoArrayHashMap(u32, std.ArrayList(u32)).init(allocator);
-    var a = std.AutoArrayHashMap(u32, std.ArrayList(u32)).init(allocator);
-    defer {
-        for (rules.values()) |v| v.deinit();
-        rules.deinit();
-
-        for (a.values()) |v| v.deinit();
-        a.deinit();
-    }
-
     const file = try std.fs.cwd().openFile("puzzle_input/day5.txt", .{});
     defer file.close();
 
-    var reader = file.reader();
-    var buffer: [1024]u8 = undefined;
+    var input = try readInput(allocator, file);
+    var accumulator: u32 = 0;
 
-    while (try reader.readUntilDelimiterOrEof(&buffer, '\n')) |line_lf| {
-        const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
-        if (line.len == 0) break;
-
-        var it = std.mem.splitScalar(u8, line, '|');
-        const before = try std.fmt.parseUnsigned(u32, it.next().?, 10);
-        const after = try std.fmt.parseUnsigned(u32, it.next().?, 10);
-
-        {
-            const entry = try a.getOrPut(after);
-            if (!entry.found_existing) {
-                entry.value_ptr.* = std.ArrayList(u32).init(allocator);
-            }
-            try entry.value_ptr.*.append(before);
+    for (input.updates) |update| {
+        const sorted = try kahn_sort(allocator, update, &input.graph);
+        if (!std.mem.eql(u32, sorted, update)) {
+            accumulator += sorted[sorted.len / 2];
         }
-
-        const entry = try rules.getOrPut(before);
-        if (!entry.found_existing) {
-            entry.value_ptr.* = std.ArrayList(u32).init(allocator);
-        }
-        try entry.value_ptr.*.append(after);
-    }
-
-    while (try reader.readUntilDelimiterOrEof(&buffer, '\n')) |line_lf| {
-        const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
-
-        var pages = std.ArrayList(u32).init(allocator);
-        defer pages.deinit();
-
-        var it = std.mem.splitScalar(u8, line, ',');
-        while (it.next()) |str| {
-            const page = try std.fmt.parseUnsigned(u32, str, 10);
-            try pages.append(page);
-        }
-
-        // The rules expected are different...
-        if (try orderedCorrectly(allocator, a, pages.items)) continue;
-
-        // Dumbass solution lmao.
-        // TODO: implement a proper topoglical sorting algorithm *khan's algorithm
-
-        while (!try orderedCorrectly(allocator, a, pages.items)) {
-            for (pages.items, 0..) |page, i| {
-                if (rules.get(page)) |not_allowed| {
-                    if (intersects(pages.items[0..i], not_allowed.items)) |j| {
-                        std.mem.swap(u32, &pages.items[i], &pages.items[j]);
-                    }
-                }
-            }
-        }
-        std.debug.print("res: {d}\n", .{pages.items[pages.items.len / 2]});
-
-        accumulator += pages.items[pages.items.len / 2];
     }
 
     return accumulator;
