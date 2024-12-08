@@ -39,9 +39,13 @@ pub fn main() !void {
     try day6.ppSolutionOne(stdout, allocator);
     try day6.ppSolutionTwo(stdout, allocator);
 
-    try stdout.print("day 8 solutions:\n", .{});
+    try stdout.print("day 7 solutions:\n", .{});
     try day7.ppSolutionOne(stdout, allocator);
     try day7.ppSolutionTwo(stdout, allocator);
+
+    // try stdout.print("day 8 solutions:\n", .{});
+    // try day8.ppSolutionOne(stdout, allocator);
+    // try day8.ppSolutionTwo(stdout, allocator);
 
     try bw.flush();
 }
