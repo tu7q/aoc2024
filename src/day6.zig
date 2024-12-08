@@ -34,10 +34,8 @@ const PathElem = struct {
     loc: Vec2,
 };
 
-fn findPath(allocator: Allocator, origin: Vec2, origin_dir: Direction, obstructions: [][]bool, bounds: Bounds) !?[]PathElem {
-    var path = std.ArrayList(PathElem).init(allocator);
-
-    var seen = std.AutoHashMap(PathElem, void).init(allocator);
+fn isPath(allocator: Allocator, origin: Vec2, origin_dir: Direction, obstructions: [][]bool, bounds: Bounds) !bool {
+    var seen = std.AutoArrayHashMap(PathElem, void).init(allocator);
     defer seen.deinit();
 
     var current = origin;
@@ -59,9 +57,37 @@ fn findPath(allocator: Allocator, origin: Vec2, origin_dir: Direction, obstructi
             }
         } else {
             const elem = PathElem{ .loc = current, .dir = facing };
-            if ((try seen.getOrPut(elem)).found_existing) return null;
-            try path.append(elem);
+            if ((try seen.getOrPut(elem)).found_existing) return false;
 
+            current = next;
+        }
+    }
+
+    return true;
+}
+
+fn findPath(allocator: Allocator, origin: Vec2, origin_dir: Direction, obstructions: [][]bool, bounds: Bounds) ![]PathElem {
+    var path = std.ArrayList(PathElem).init(allocator);
+
+    var current = origin;
+    var facing = origin_dir;
+
+    while (bounds.contains(current)) {
+        const next = switch (facing) {
+            .North => Vec2{ .x = current.x, .y = current.y - 1 },
+            .East => Vec2{ .x = current.x + 1, .y = current.y },
+            .South => Vec2{ .x = current.x, .y = current.y + 1 },
+            .West => Vec2{ .x = current.x - 1, .y = current.y },
+        };
+        if (bounds.contains(next) and obstructions[next.y - bounds.min_y][next.x - bounds.min_x]) {
+            switch (facing) {
+                .North => facing = .East,
+                .East => facing = .South,
+                .South => facing = .West,
+                .West => facing = .North,
+            }
+        } else {
+            try path.append(PathElem{ .loc = current, .dir = facing });
             current = next;
         }
     }
@@ -148,13 +174,13 @@ pub fn solutionOne(allocator: Allocator) !u32 {
     const input = try ProblemInput.readInput(allocator, file);
     defer input.deinit(allocator);
 
-    const path = (try findPath(
+    const path = try findPath(
         allocator,
         input.guard,
         input.facing,
         input.obstructions,
         input.bounds,
-    )).?;
+    );
     defer allocator.free(path);
 
     var distinct_positions = std.AutoArrayHashMap(Vec2, void).init(allocator);
@@ -179,13 +205,13 @@ pub fn solutionTwo(allocator: Allocator) !u32 {
     const input = try ProblemInput.readInput(allocator, file);
     defer input.deinit(allocator);
 
-    const path = (try findPath(
+    const path = try findPath(
         allocator,
         input.guard,
         input.facing,
         input.obstructions,
         input.bounds,
-    )).?;
+    );
     defer allocator.free(path);
 
     var cycles: u32 = 0;
@@ -205,9 +231,7 @@ pub fn solutionTwo(allocator: Allocator) !u32 {
         input.obstructions[y][x] = true;
         defer input.obstructions[y][x] = false;
 
-        if (try findPath(allocator, elems[0].loc, elems[0].dir, input.obstructions, input.bounds)) |p| {
-            allocator.free(p);
-        } else {
+        if (try isPath(allocator, elems[0].loc, elems[0].dir, input.obstructions, input.bounds)) {} else {
             cycles += 1;
         }
 
