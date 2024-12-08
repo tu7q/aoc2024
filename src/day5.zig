@@ -6,23 +6,19 @@ const AdjacencyMatrix = [100][100]u1;
 // If there is an edge from vertex i to j then adjMat[i][j] == 1 otherwise adjMat[i][j] == 0.
 
 // Rules represents each incoming edge.
-fn kahn_sort(allocator: Allocator, sequence: []u32, rules: *AdjacencyMatrix) ![]u32 {
-    var restore = std.ArrayList([2]u32).init(allocator);
-    defer {
-        for (restore.items) |v| {
-            rules[v[0]][v[1]] = 1;
-        }
-        restore.deinit();
-    }
+// Note: this function mutates the rules.
+fn kahn_sort(allocator: Allocator, sequence: []u32, rules: AdjacencyMatrix) ![]u32 {
+    var graph: AdjacencyMatrix = undefined;
+    @memcpy(&graph, &rules);
 
     var L = std.ArrayList(u32).init(allocator);
     var S = std.ArrayList(u32).init(allocator);
     defer S.deinit();
 
     for (sequence) |n| {
-        for (0..rules.len) |i| {
+        for (0..graph.len) |i| {
             if (!std.mem.containsAtLeast(u32, sequence, 1, &[_]u32{@intCast(i)})) continue;
-            if (rules[i][n] != 0) break;
+            if (graph[i][n] != 0) break;
         } else {
             try S.append(n);
         }
@@ -33,12 +29,11 @@ fn kahn_sort(allocator: Allocator, sequence: []u32, rules: *AdjacencyMatrix) ![]
         try L.append(n);
 
         for (sequence) |m| {
-            if (rules[n][m] == 0) continue;
-            rules[n][m] = 0;
-            try restore.append([2]u32{ n, m });
-            for (0..rules.len) |j| {
+            if (graph[n][m] == 0) continue;
+            graph[n][m] = 0;
+            for (0..graph.len) |j| {
                 if (!std.mem.containsAtLeast(u32, sequence, 1, &[_]u32{@intCast(j)})) continue;
-                if (rules[j][m] != 0) break;
+                if (graph[j][m] != 0) break;
             } else {
                 try S.append(m);
             }
@@ -102,11 +97,11 @@ pub fn solutionOne(allocator: Allocator) !u32 {
     const file = try std.fs.cwd().openFile("puzzle_input/day5.txt", .{});
     defer file.close();
 
-    var input = try readInput(allocator, file);
+    const input = try readInput(allocator, file);
     var accumulator: u32 = 0;
 
     for (input.updates) |update| {
-        const sorted = try kahn_sort(allocator, update, &input.graph);
+        const sorted = try kahn_sort(allocator, update, input.graph);
         if (std.mem.eql(u32, sorted, update)) {
             accumulator += update[update.len / 2];
         }
@@ -124,11 +119,11 @@ pub fn solutionTwo(allocator: Allocator) !u32 {
     const file = try std.fs.cwd().openFile("puzzle_input/day5.txt", .{});
     defer file.close();
 
-    var input = try readInput(allocator, file);
+    const input = try readInput(allocator, file);
     var accumulator: u32 = 0;
 
     for (input.updates) |update| {
-        const sorted = try kahn_sort(allocator, update, &input.graph);
+        const sorted = try kahn_sort(allocator, update, input.graph);
         if (!std.mem.eql(u32, sorted, update)) {
             accumulator += sorted[sorted.len / 2];
         }
