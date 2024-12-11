@@ -8,6 +8,7 @@ const day5 = @import("day5.zig");
 const day6 = @import("day6.zig");
 const day7 = @import("day7.zig");
 const day8 = @import("day8.zig");
+const day9 = @import("day9.zig");
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
@@ -47,6 +48,10 @@ pub fn main() !void {
     try stdout.print("day 8 solutions:\n", .{});
     try day8.ppSolutionOne(stdout, allocator);
     try day8.ppSolutionTwo(stdout, allocator);
+
+    try stdout.print("day 9 solutions:\n", .{});
+    try day9.ppSolutionOne(stdout, allocator);
+    try day9.ppSolutionTwo(stdout, allocator);
 
     try bw.flush();
 }
