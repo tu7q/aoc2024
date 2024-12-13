@@ -63,7 +63,9 @@ fn countStones(cache: *std.AutoHashMap(MemoizeKey, u64), stone: Stone, blinks: u
         }, blinks - 1);
     };
 
-    _ = try cache.getOrPutValue(key, result);
+    // cache.putNoClobber(key: K, value: V)
+    // _ = try cache.getOrPutValue(key, result);
+    try cache.put(key, result);
     return result;
 }
 

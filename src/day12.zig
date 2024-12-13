@@ -1,11 +1,24 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+// FIXME: this entire file.
+
 const Adjacent = struct {
     n: ?usize,
     e: ?usize,
     s: ?usize,
     w: ?usize,
+};
+
+const AdjacentValues = struct {
+    n: ?u8,
+    ne: ?u8,
+    e: ?u8,
+    se: ?u8,
+    s: ?u8,
+    sw: ?u8,
+    w: ?u8,
+    nw: ?u8,
 };
 
 const Garden = struct {
@@ -25,6 +38,68 @@ const Garden = struct {
         };
 
         return res;
+    }
+
+    pub fn getAdjacentValues(self: @This(), i: usize) AdjacentValues {
+        const y = i / self.width;
+        const x = i % self.width;
+
+        const north = y > 0;
+        const east = x + 1 < self.width;
+        const south = y + 1 < self.height;
+        const west = x > 0;
+
+        const n_idx: ?usize = if (north) (y - 1) * self.width + x else null;
+        const s_idx: ?usize = if (south) (y + 1) * self.width + x else null;
+
+        return AdjacentValues{
+            .nw = if (west and north) self.plots[n_idx.? - 1] else null,
+            .n = if (north) self.plots[n_idx.?] else null,
+            .ne = if (north and east) self.plots[n_idx.? + 1] else null,
+            .e = if (east) self.plots[i + 1] else null,
+            .se = if (south and east) self.plots[s_idx.? + 1] else null,
+            .s = if (south) self.plots[s_idx.?] else null,
+            .sw = if (south and west) self.plots[s_idx.? - 1] else null,
+            .w = if (west) self.plots[i - 1] else null,
+        };
+    }
+
+    // The number of corners at a given tile.
+    pub fn numCorners(self: @This(), i: usize) u8 {
+        const c = self.plots[i];
+        const adj = self.getAdjacentValues(i);
+
+        var count: u8 = 0;
+
+        // Check for corner in the north west.
+        if (adj.nw != c) {
+            if ((adj.n == c and adj.w == c) or (adj.n != c and adj.w != c)) {
+                count += 1;
+            }
+        } else if (adj.n != c and adj.w != c) count += 1;
+
+        // Check for corner in the north east
+        if (adj.ne != c) {
+            if ((adj.n == c and adj.e == c) or (adj.n != c and adj.e != c)) {
+                count += 1;
+            }
+        } else if (adj.n != c and adj.e != c) count += 1;
+
+        // Check for corner in the south west
+        if (adj.sw != c) {
+            if ((adj.s == c and adj.w == c) or (adj.s != c and adj.w != c)) {
+                count += 1;
+            }
+        } else if (adj.s != c and adj.w != c) count += 1;
+
+        // Check for corner in the south east
+        if (adj.se != c) {
+            if ((adj.s == c and adj.e == c) or (adj.s != c and adj.e != c)) {
+                count += 1;
+            }
+        } else if (adj.s != c and adj.e != c) count += 1;
+
+        return count;
     }
 };
 
@@ -167,15 +242,9 @@ pub fn solutionTwo(allocator: Allocator) !u32 {
     for (garden.plots, 0..) |plot, i| {
         if (has_known_region[i]) continue;
 
-        // This works but is terrible.
-        // Couldn't even be bothered calling deinit()
-
-        var n_edges = std.ArrayList(usize).init(allocator);
-        var s_edges = std.ArrayList(usize).init(allocator);
-        var e_edges = std.ArrayList(usize).init(allocator);
-        var w_edges = std.ArrayList(usize).init(allocator);
-
         var region = std.ArrayList(usize).init(allocator);
+
+        var corners: u32 = 0;
 
         var unvisited = std.ArrayList(usize).init(allocator);
         defer unvisited.deinit();
@@ -187,6 +256,8 @@ pub fn solutionTwo(allocator: Allocator) !u32 {
             if (has_known_region[n]) continue;
 
             try region.append(n);
+
+            corners += garden.numCorners(n);
             has_known_region[n] = true;
 
             const adj = garden.getAdjacent(n);
@@ -195,125 +266,10 @@ pub fn solutionTwo(allocator: Allocator) !u32 {
             if (adj.e != null and garden.plots[adj.e.?] == plot) try unvisited.append(adj.e.?);
             if (adj.s != null and garden.plots[adj.s.?] == plot) try unvisited.append(adj.s.?);
             if (adj.w != null and garden.plots[adj.w.?] == plot) try unvisited.append(adj.w.?);
-
-            if (adj.n) |idx| {
-                if (garden.plots[idx] != plot) try n_edges.append(n);
-            } else try n_edges.append(n);
-            if (adj.e) |idx| {
-                if (garden.plots[idx] != plot) try e_edges.append(n);
-            } else try e_edges.append(n);
-            if (adj.s) |idx| {
-                if (garden.plots[idx] != plot) try s_edges.append(n);
-            } else try s_edges.append(n);
-            if (adj.w) |idx| {
-                if (garden.plots[idx] != plot) try w_edges.append(n);
-            } else try w_edges.append(n);
-        }
-
-        const lessThanHorizontal = struct {
-            fn lessThanFn(context: void, lhs: usize, rhs: usize) bool {
-                return std.sort.asc(usize)(context, lhs, rhs);
-            }
-        }.lessThanFn;
-
-        const lessThanVertical = struct {
-            fn lessThanFn(width: usize, lhs: usize, rhs: usize) bool {
-                return std.sort.asc(usize)({}, lhs / width, rhs / width);
-            }
-        }.lessThanFn;
-
-        std.mem.sort(usize, n_edges.items, {}, lessThanHorizontal);
-        std.mem.sort(usize, e_edges.items, garden.width, lessThanVertical);
-        std.mem.sort(usize, s_edges.items, {}, lessThanHorizontal);
-        std.mem.sort(usize, w_edges.items, garden.width, lessThanVertical);
-
-        const Facing = enum {
-            N,
-            E,
-            S,
-            W,
-        };
-
-        const Range = struct {
-            start: usize,
-            end: usize,
-            dir: Facing,
-
-            pub fn isAdjacent(self: @This(), width: usize, j: usize) bool {
-                switch (self.dir) {
-                    .N, .S => return self.start == j + 1 or self.end + 1 == j, // start - width == i or end + width == i,
-                    .E, .W => return self.start == j + width or self.end + width == j, // start - 1 == width or end + 1 == i
-                }
-            }
-        };
-        var edges = std.ArrayList(Range).init(allocator);
-
-        for (n_edges.items) |face| {
-            for (edges.items) |*edge| {
-                if (edge.dir != .N) continue;
-                if (edge.isAdjacent(garden.width, face)) {
-                    edge.end = face; // because its sorted.
-                    break;
-                }
-            } else {
-                try edges.append(.{
-                    .dir = .N,
-                    .start = face,
-                    .end = face,
-                });
-            }
-        }
-
-        for (e_edges.items) |face| {
-            for (edges.items) |*edge| {
-                if (edge.dir != .E) continue;
-                if (edge.isAdjacent(garden.width, face)) {
-                    edge.end = face; // because its sorted.
-                    break;
-                }
-            } else {
-                try edges.append(.{
-                    .dir = .E,
-                    .start = face,
-                    .end = face,
-                });
-            }
-        }
-
-        for (s_edges.items) |face| {
-            for (edges.items) |*edge| {
-                if (edge.dir != .S) continue;
-                if (edge.isAdjacent(garden.width, face)) {
-                    edge.end = face; // because its sorted.
-                    break;
-                }
-            } else {
-                try edges.append(.{
-                    .dir = .S,
-                    .start = face,
-                    .end = face,
-                });
-            }
-        }
-
-        for (w_edges.items) |face| {
-            for (edges.items) |*edge| {
-                if (edge.dir != .W) continue;
-                if (edge.isAdjacent(garden.width, face)) {
-                    edge.end = face; // because its sorted.
-                    break;
-                }
-            } else {
-                try edges.append(.{
-                    .dir = .W,
-                    .start = face,
-                    .end = face,
-                });
-            }
         }
 
         try regions.append(RegionTwo{
-            .edges = edges.items.len,
+            .edges = corners,
             .plots = try region.toOwnedSlice(),
         });
     }
