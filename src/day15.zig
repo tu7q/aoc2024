@@ -263,9 +263,10 @@ const WideMap = struct {
                 const rhs_y = rhs / ctxt.width;
 
                 switch (ctxt.direction) {
+                    // The y-axis ordering is inverted compared to the x-axis since (0, 0) is at the top left.
                     .North => return std.sort.asc(usize)({}, lhs_y, rhs_y),
                     .South => return std.sort.desc(usize)({}, lhs_y, rhs_y),
-                    .East => return std.sort.desc(usize)({}, lhs_x, rhs_x), // Eash and west make sense but I can't understand North and south...
+                    .East => return std.sort.desc(usize)({}, lhs_x, rhs_x),
                     .West => return std.sort.asc(usize)({}, lhs_x, rhs_x),
                 }
             }
