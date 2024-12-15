@@ -224,13 +224,14 @@ const WideMap = struct {
         var seen = std.AutoArrayHashMap(usize, void).init(allocator);
         defer seen.deinit();
 
-        var Q = std.ArrayList(usize).init(allocator);
+        var Q = try std.ArrayList(usize).initCapacity(allocator, 1);
         defer Q.deinit();
 
         try Q.append(self.robot);
 
-        while (Q.items.len > 0) {
-            const n = Q.pop();
+        var k: usize = 0;
+        while (k < Q.items.len) : (k += 1) {
+            const n = Q.items[k];
             if (seen.contains(n)) continue;
             try seen.put(n, {});
 
@@ -247,32 +248,8 @@ const WideMap = struct {
             }
         }
 
-        const Context = struct {
-            width: usize,
-            direction: Direction,
-        };
-
-        std.mem.sort(usize, seen.keys(), Context{
-            .width = self.width,
-            .direction = direction,
-        }, struct {
-            pub fn lessThanFn(ctxt: Context, lhs: usize, rhs: usize) bool {
-                const lhs_x = lhs % ctxt.width;
-                const rhs_x = rhs % ctxt.width;
-                const lhs_y = lhs / ctxt.width;
-                const rhs_y = rhs / ctxt.width;
-
-                switch (ctxt.direction) {
-                    // The y-axis ordering is inverted compared to the x-axis since (0, 0) is at the top left.
-                    .North => return std.sort.asc(usize)({}, lhs_y, rhs_y),
-                    .South => return std.sort.desc(usize)({}, lhs_y, rhs_y),
-                    .East => return std.sort.desc(usize)({}, lhs_x, rhs_x),
-                    .West => return std.sort.asc(usize)({}, lhs_x, rhs_x),
-                }
-            }
-        }.lessThanFn);
-
-        for (seen.keys()) |i| {
+        var it = std.mem.reverseIterator(seen.keys());
+        while (it.next()) |i| {
             const j = self.next(i, direction);
             self.layout[j] = self.layout[i];
             self.layout[i] = .Empty;
