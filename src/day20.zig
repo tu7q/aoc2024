@@ -190,7 +190,7 @@ pub fn dijkstra(allocator: Allocator, map: Map) !SearchResult {
     };
 }
 
-fn countShortcutsAtLeast(allocator: Allocator, map: Map, cheat_time: u32) !u32 {
+fn countShortcutsAtLeast(allocator: Allocator, map: Map, cheat_time: u32, saves_at_least: u32) !u32 {
     var r = try dijkstra(allocator, map);
     defer {
         allocator.free(r.distances);
@@ -207,7 +207,7 @@ fn countShortcutsAtLeast(allocator: Allocator, map: Map, cheat_time: u32) !u32 {
 
         for (possible_shortcuts) |possible_shortcut| {
             const length = r.distances[possible_shortcut] + l + map.manhattan_distance(p, possible_shortcut) - 1;
-            if (normal_path_length >= 100 + length) shortcuts += 1;
+            if (normal_path_length >= saves_at_least + length) shortcuts += 1;
         }
     }
 
@@ -224,7 +224,7 @@ pub fn solutionOne(allocator: Allocator) !u32 {
     const map = try readInput(allocator);
     defer allocator.free(map.layout);
 
-    return countShortcutsAtLeast(allocator, map, 2);
+    return countShortcutsAtLeast(allocator, map, 2, 100);
 }
 
 pub fn ppSolutionTwo(writer: anytype, allocator: Allocator) !void {
@@ -236,5 +236,5 @@ pub fn solutionTwo(allocator: Allocator) !u32 {
     const map = try readInput(allocator);
     defer allocator.free(map.layout);
 
-    return countShortcutsAtLeast(allocator, map, 20);
+    return countShortcutsAtLeast(allocator, map, 20, 100);
 }
