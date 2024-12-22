@@ -21,9 +21,20 @@ const day18 = @import("day18.zig");
 const day19 = @import("day19.zig");
 const day20 = @import("day20.zig");
 const day21 = @import("day21.zig");
+const day22 = @import("day22.zig");
 
 pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+    const heap = std.heap.page_allocator;
+    var arena_impl = std.heap.ArenaAllocator.init(heap);
+    defer arena_impl.deinit();
+    const allocator = arena_impl.allocator();
+    // var buffer: [1000000]u8 = undefined;
+    // var buffer_impl = std.heap.FixedBufferAllocator.init(&buffer);
+    // const allocator = buffer_impl.allocator();
+
+    // var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
+    // defer _ = gpa_impl.deinit();
+    // const allocator = gpa_impl.allocator();
 
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
@@ -89,29 +100,33 @@ pub fn main() !void {
     try day15.ppSolutionOne(stdout, allocator);
     try day15.ppSolutionTwo(stdout, allocator);
 
-    // try stdout.print("day 16 solutions:\n", .{});
-    // try day16.ppSolutionOne(stdout, allocator);
-    // try day16.ppSolutionTwo(stdout, allocator);
+    try stdout.print("day 16 solutions:\n", .{});
+    try day16.ppSolutionOne(stdout, allocator);
+    try day16.ppSolutionTwo(stdout, allocator);
 
-    // try stdout.print("day 17 solutions:\n", .{});
-    // try day17.ppSolutionOne(stdout, allocator);
-    // try day17.ppSolutionTwo(stdout, allocator);
+    try stdout.print("day 17 solutions:\n", .{});
+    try day17.ppSolutionOne(stdout, allocator);
+    try day17.ppSolutionTwo(stdout, allocator);
 
-    // try stdout.print("day 18 solutions:\n", .{});
-    // try day18.ppSolutionOne(stdout, allocator);
-    // try day18.ppSolutionTwo(stdout, allocator);
+    try stdout.print("day 18 solutions:\n", .{});
+    try day18.ppSolutionOne(stdout, allocator);
+    try day18.ppSolutionTwo(stdout, allocator);
 
-    // try stdout.print("day 19 solutions:\n", .{});
-    // try day19.ppSolutionOne(stdout, allocator);
-    // try day19.ppSolutionTwo(stdout, allocator);
+    try stdout.print("day 19 solutions:\n", .{});
+    try day19.ppSolutionOne(stdout, allocator);
+    try day19.ppSolutionTwo(stdout, allocator);
 
-    // try stdout.print("day 20 solutions:\n", .{});
-    // try day20.ppSolutionOne(stdout, allocator);
-    // try day20.ppSolutionTwo(stdout, allocator);
+    try stdout.print("day 20 solutions:\n", .{});
+    try day20.ppSolutionOne(stdout, allocator);
+    try day20.ppSolutionTwo(stdout, allocator);
 
     try stdout.print("day 21 solutions:\n", .{});
     try day21.ppSolutionOne(stdout, allocator);
     try day21.ppSolutionTwo(stdout, allocator);
+
+    try stdout.print("day 22 solutions:\n", .{});
+    try day22.ppSolutionOne(stdout, allocator);
+    try day22.ppSolutionTwo(stdout, allocator);
 
     try bw.flush();
 }
