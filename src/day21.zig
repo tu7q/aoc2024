@@ -1,46 +1,67 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-// For each character the final robot must be on that character whilst all of the robots must be on the A.
-// Prefer straight paths rather than turns.
+const Vec2 = struct {
+    x: u8,
+    y: u8,
+};
 
 const NUMPAD = &[_][]const u8{ "789", "456", "123", ".0A" };
 const DIRECTIONAL_ROBOT = &[_][]const u8{ ".^A", "<v>" };
 
-const CacheKey = struct {
+const DIRECTIONAL_POSITIONS = blk: {
+    var POSITIONS: [255]Vec2 = undefined;
+    POSITIONS['^'] = Vec2{ .x = 1, .y = 0 };
+    POSITIONS['A'] = Vec2{ .x = 2, .y = 0 };
+    POSITIONS['<'] = Vec2{ .x = 0, .y = 1 };
+    POSITIONS['v'] = Vec2{ .x = 1, .y = 1 };
+    POSITIONS['>'] = Vec2{ .x = 2, .y = 1 };
+    break :blk POSITIONS;
+};
+
+const NUMPAD_POSITIONS = blk: {
+    var POSITIONS: [255]Vec2 = undefined;
+    POSITIONS['7'] = Vec2{ .x = 0, .y = 0 };
+    POSITIONS['8'] = Vec2{ .x = 1, .y = 0 };
+    POSITIONS['9'] = Vec2{ .x = 2, .y = 0 };
+    POSITIONS['4'] = Vec2{ .x = 0, .y = 1 };
+    POSITIONS['5'] = Vec2{ .x = 1, .y = 1 };
+    POSITIONS['6'] = Vec2{ .x = 2, .y = 1 };
+    POSITIONS['1'] = Vec2{ .x = 0, .y = 2 };
+    POSITIONS['2'] = Vec2{ .x = 1, .y = 2 };
+    POSITIONS['3'] = Vec2{ .x = 2, .y = 2 };
+    POSITIONS['0'] = Vec2{ .x = 1, .y = 3 };
+    POSITIONS['A'] = Vec2{ .x = 2, .y = 3 };
+    break :blk POSITIONS;
+};
+
+const CacheKey = packed struct {
     start: u8,
     end: u8,
-    intermediaries: u32,
+    intermediaries: u8,
 };
 
 const Cache = std.AutoHashMap(CacheKey, u64);
 
-pub fn shortest_sequence(cache: *Cache, grid: []const []const u8, start: u8, end: u8, intermediaries: u32, max_robots: u32) !u64 {
+pub fn shortest_sequence(cache: *Cache, grid: []const []const u8, start: u8, end: u8, intermediaries: u8, max_robots: u8) Allocator.Error!u64 {
     const key = CacheKey{
         .start = start,
         .end = end,
         .intermediaries = intermediaries,
     };
+
     if (cache.get(key)) |v| return v;
 
-    var sx: usize = 0;
-    var sy: usize = 0;
-    var ex: usize = 0;
-    var ey: usize = 0;
+    const end_pos = if (intermediaries == max_robots) NUMPAD_POSITIONS[end] else DIRECTIONAL_POSITIONS[end];
+    const start_pos = if (intermediaries == max_robots) NUMPAD_POSITIONS[start] else DIRECTIONAL_POSITIONS[start];
 
-    for (grid, 0..) |row, y| {
-        if (std.mem.indexOfScalar(u8, row, start)) |x| {
-            sx = x;
-            sy = y;
-        }
-        if (std.mem.indexOfScalar(u8, row, end)) |x| {
-            ex = x;
-            ey = y;
-        }
-    }
+    const sx = start_pos.x;
+    const sy = start_pos.y;
+    const ex = end_pos.x;
+    const ey = end_pos.y;
 
-    const x_diff = @abs(@as(isize, @intCast(ex)) - @as(isize, @intCast(sx)));
-    const y_diff = @abs(@as(isize, @intCast(ey)) - @as(isize, @intCast(sy)));
+    const x_diff = if (ex > sx) ex - sx else sx - ex;
+    const y_diff = if (ey > sy) ey - sy else sy - ey;
 
     if (intermediaries == 0) {
         return @intCast(x_diff + y_diff + 1);
@@ -49,61 +70,34 @@ pub fn shortest_sequence(cache: *Cache, grid: []const []const u8, start: u8, end
     const v: u8 = if (sy > ey) '^' else 'v';
     const h: u8 = if (sx > ex) '<' else '>';
 
-    // TODO: Remove this badness.
-    var heap = std.heap.HeapAllocator.init();
-    defer heap.deinit();
-    const allocator = heap.allocator();
+    // This way avoids allocating a slice
 
-    const vertical = allocator.alloc(u8, y_diff) catch unreachable;
-    defer allocator.free(vertical);
-    @memset(vertical, v);
+    const aa = try shortest_sequence(cache, DIRECTIONAL_ROBOT, 'A', 'A', intermediaries - 1, max_robots);
+    const av = try shortest_sequence(cache, DIRECTIONAL_ROBOT, 'A', v, intermediaries - 1, max_robots);
+    const vv = if (y_diff > 1) (y_diff - 1) * try shortest_sequence(cache, DIRECTIONAL_ROBOT, v, v, intermediaries - 1, max_robots) else 0;
+    const vh = try shortest_sequence(cache, DIRECTIONAL_ROBOT, v, h, intermediaries - 1, max_robots);
+    const hh = if (x_diff > 1) (x_diff - 1) * try shortest_sequence(cache, DIRECTIONAL_ROBOT, h, h, intermediaries - 1, max_robots) else 0;
+    const ha = try shortest_sequence(cache, DIRECTIONAL_ROBOT, h, 'A', intermediaries - 1, max_robots);
+    const ah = try shortest_sequence(cache, DIRECTIONAL_ROBOT, 'A', h, intermediaries - 1, max_robots);
+    const hv = try shortest_sequence(cache, DIRECTIONAL_ROBOT, h, v, intermediaries - 1, max_robots);
+    const va = try shortest_sequence(cache, DIRECTIONAL_ROBOT, v, 'A', intermediaries - 1, max_robots);
 
-    const horizontal = allocator.alloc(u8, x_diff) catch unreachable;
-    defer allocator.free(horizontal);
-    @memset(horizontal, h);
+    const result = if (x_diff == 0 and y_diff == 0) blk: {
+        break :blk aa;
+    } else if (x_diff == 0) blk: {
+        // only vertical
+        break :blk av + vv + va;
+    } else if (y_diff == 0) blk: {
+        // Horizontal only
+        break :blk ah + hh + ha;
+    } else blk: {
+        // Both horizontal and vertical
 
-    const a = std.fmt.allocPrint(allocator, "A{s}{s}A", .{ vertical, horizontal }) catch unreachable;
-    defer allocator.free(a);
+        const a_cost = av + vv + vh + hh + ha;
+        const b_cost = ah + hh + hv + vv + va;
 
-    const b = std.fmt.allocPrint(allocator, "A{s}{s}A", .{ horizontal, vertical }) catch unreachable;
-    defer allocator.free(b);
-
-    const a_cost = blk: {
-        var sum: u64 = 0;
-
-        var it = std.mem.window(u8, a, 2, 1);
-        while (it.next()) |window| {
-            sum += try shortest_sequence(cache, DIRECTIONAL_ROBOT, window[0], window[1], intermediaries - 1, max_robots);
-        }
-
-        break :blk sum;
-    };
-
-    const b_cost = blk: {
-        var sum: u64 = 0;
-
-        var it = std.mem.window(u8, b, 2, 1);
-        while (it.next()) |window| {
-            sum += try shortest_sequence(cache, DIRECTIONAL_ROBOT, window[0], window[1], intermediaries - 1, max_robots);
-        }
-
-        break :blk sum;
-    };
-
-    const result = blk: {
-        const hsign: isize = if (h == '>') 1 else -1;
-        for (1..horizontal.len + 1) |offset| {
-            const f: isize = @as(isize, @intCast(offset)) * hsign;
-            const x: usize = @intCast(@as(isize, @intCast(sx)) + f);
-            if (grid[sy][x] == '.') break :blk a_cost;
-        }
-
-        const vsign: isize = if (v == 'v') 1 else -1;
-        for (1..vertical.len + 1) |offset| {
-            const f: isize = @as(isize, @intCast(offset)) * vsign;
-            const y: usize = @intCast(@as(isize, @intCast(sy)) + f);
-            if (grid[y][sx] == '.') break :blk b_cost;
-        }
+        if (grid[sy][ex] == '.') break :blk a_cost;
+        if (grid[ey][sx] == '.') break :blk b_cost;
 
         break :blk @min(a_cost, b_cost);
     };
@@ -142,8 +136,6 @@ pub fn solutionOne(allocator: Allocator) !u64 {
             shortest += try shortest_sequence(&cache, NUMPAD, c[0], c[1], 2, 2);
         }
 
-        std.debug.print("length: {d}\n", .{shortest});
-
         ans += shortest * try std.fmt.parseInt(u32, line[0 .. line.len - 1], 10);
     }
 
@@ -178,8 +170,6 @@ pub fn solutionTwo(allocator: Allocator) !u64 {
         while (it.next()) |c| {
             shortest += try shortest_sequence(&cache, NUMPAD, c[0], c[1], 25, 25);
         }
-
-        std.debug.print("length: {d}\n", .{shortest});
 
         ans += shortest * try std.fmt.parseInt(u32, line[0 .. line.len - 1], 10);
     }

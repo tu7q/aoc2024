@@ -25,12 +25,11 @@ const day22 = @import("day22.zig");
 
 pub fn main() !void {
     const heap = std.heap.page_allocator;
-    var arena_impl = std.heap.ArenaAllocator.init(heap);
-    defer arena_impl.deinit();
-    const allocator = arena_impl.allocator();
-    // var buffer: [1000000]u8 = undefined;
-    // var buffer_impl = std.heap.FixedBufferAllocator.init(&buffer);
-    // const allocator = buffer_impl.allocator();
+    const allocator = heap;
+
+    // var arena_impl = std.heap.ArenaAllocator.init(heap);
+    // defer arena_impl.deinit();
+    // const allocator = arena_impl.allocator();
 
     // var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
     // defer _ = gpa_impl.deinit();
