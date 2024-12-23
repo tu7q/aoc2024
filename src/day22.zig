@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const SecretValueIterator = struct {
     secret: u64,
+    count: usize,
 
     fn mix(secret: u64, num: u64) u64 {
         return secret ^ num;
@@ -12,9 +13,10 @@ const SecretValueIterator = struct {
         return @mod(secret, 16777216);
     }
 
-    // Always returns a value.
-    // But returns an optional to be consistent.
     pub fn next(self: *@This()) ?u8 {
+        if (self.count == 0) return null;
+        self.count -= 1;
+
         const current: u64 = self.secret;
 
         var next_secret: u64 = undefined;
@@ -102,10 +104,8 @@ pub fn solutionOne(_: Allocator) !u64 {
 
         const secret = try std.fmt.parseInt(u64, line, 10);
 
-        var it = SecretValueIterator{ .secret = secret };
-        for (0..2000) |_| {
-            _ = it.next().?;
-        }
+        var it = SecretValueIterator{ .secret = secret, .count = 2000 };
+        while (it.next()) |_| {}
         sum += it.secret;
     }
 
@@ -136,13 +136,12 @@ pub fn solutionTwo(allocator: Allocator) !u64 {
         var seen = std.AutoHashMap(Changes, void).init(allocator);
         defer seen.deinit();
 
-        var value_iterator = SecretValueIterator{ .secret = secret };
+        var value_iterator = SecretValueIterator{ .secret = secret, .count = 2000 };
         var window_iterator = WindowOfIterator(SecretValueIterator, u8, 5){
             .iterator = &value_iterator,
         };
 
-        for (0..2000) |_| {
-            const window = window_iterator.next().?;
+        while (window_iterator.next()) |window| {
             const changes = Changes.fromSlice(window);
 
             if (seen.contains(changes)) continue;
