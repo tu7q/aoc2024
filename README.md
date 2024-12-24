@@ -2,3 +2,5 @@
 
 https://adventofcode.com/
 
+dependencies:
+    - https://github.com/deckarep/ziglang-set
