@@ -258,8 +258,7 @@ pub fn solutionTwo(allocator: Allocator) ![]u8 {
 
         var it = PowersetIterator.init(arena, v.unmanaged.unmanaged.keys(), v.cardinality());
         while (try it.next(allocator)) |sub| {
-            if (best.len > sub.len) break;
-            // For some reason best.len >= sub.len doesn't work???
+            if (best.len >= sub.len + 1) break;
 
             if (allConnected(connections, sub)) {
                 best = try arena.alloc(u16, sub.len + 1);
