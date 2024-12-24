@@ -83,29 +83,29 @@ pub fn CombinationsIterator(T: type) type {
 
 // Good enough.
 const PowersetIterator = struct {
-    buffer: []const u16,
+    buffer: []const Name,
 
-    current: CombinationsIterator(u16),
+    current: CombinationsIterator(Name),
     size: usize,
 
-    pub fn init(allocator: Allocator, buffer: []const u16, size: usize) @This() {
+    pub fn init(allocator: Allocator, buffer: []const Name, size: usize) @This() {
         return .{
-            .current = CombinationsIterator(u16).init(allocator, buffer, size),
+            .current = CombinationsIterator(Name).init(allocator, buffer, size),
             .buffer = buffer,
             .size = size,
         };
     }
 
-    pub fn next(self: *@This(), allocator: Allocator) !?[]u16 {
+    pub fn next(self: *@This(), allocator: Allocator) !?[]Name {
         if (self.size == 0) return null;
 
-        var s: ?[]u16 = null;
+        var s: ?[]Name = null;
         while (s == null and self.size > 0) {
             s = try self.current.next(allocator);
             if (s == null) {
                 const a = self.current.allocator;
                 self.size -= 1;
-                self.current = CombinationsIterator(u16).init(a, self.buffer, self.size);
+                self.current = CombinationsIterator(Name).init(a, self.buffer, self.size);
             }
         }
 
@@ -113,46 +113,49 @@ const PowersetIterator = struct {
     }
 };
 
-pub fn into(s: []const u8) u16 {
-    std.debug.assert(s.len == 2);
+// Each name is two characters.
+const Name = struct {
+    l: u8, // left
+    r: u8, // right
 
-    // Store them in the reverse order.
-    const r = @as(u16, @intCast(s[0]));
-    const l = @as(u16, @intCast(s[1])) << 8;
+    // from slice
+    fn fromSlice(slice: []const u8) @This() {
+        std.debug.assert(slice.len == 2);
 
-    return l + r;
-}
+        return .{
+            .l = slice[0],
+            .r = slice[1],
+        };
+    }
 
-pub fn out(s: u16) struct { l: u8, r: u8 } {
-    return .{
-        .r = @as(u8, @intCast(s >> 8)),
-        .l = @as(u8, @intCast(s & std.math.maxInt(u8))),
-    };
-}
+    // Converts to an ordered array.
+    fn toArray(self: @This()) [2]u8 {
+        var array: [2]u8 = undefined;
+        array[0] = self.l;
+        array[1] = self.r;
+        return array;
+    }
 
-pub fn startswith(s: u16, with: u8) bool {
-    return @as(u8, @intCast(s & std.math.maxInt(u8))) == with;
-}
+    fn lessThan(context: void, lhs: @This(), rhs: @This()) bool {
+        _ = context;
+        return std.mem.order(u8, &lhs.toArray(), &rhs.toArray()) == .lt;
+    }
 
-// Pretty Print Solution
-pub fn ppSolutionOne(writer: anytype, allocator: Allocator) !void {
-    const result = try solutionOne(allocator);
-    try writer.print("number of three-interconnected computers that contain at least one computer starting with a t: {d}\n", .{result});
-}
+    fn startsWithScalar(self: @This(), scalar: u8) bool {
+        return self.l == scalar;
+    }
+};
 
-pub fn solutionOne(allocator: Allocator) !u32 {
-    const file = try std.fs.cwd().openFile("puzzle_input/day23.txt", .{});
-    defer file.close();
+const Connections = std.AutoArrayHashMap(Name, set.ArraySetManaged(Name));
 
+fn readInput(allocator: Allocator, reader: anytype) !Connections {
     var buffer: [1024]u8 = undefined;
-    var reader = file.reader();
 
-    var arena_impl = std.heap.ArenaAllocator.init(allocator);
-    defer arena_impl.deinit();
-
-    const arena = arena_impl.allocator();
-
-    var connections = std.AutoArrayHashMap(u16, set.ArraySetManaged(u16)).init(arena);
+    var connections = Connections.init(allocator);
+    errdefer {
+        for (connections.values()) |*v| v.deinit();
+        connections.deinit();
+    }
 
     while (try reader.readUntilDelimiterOrEof(&buffer, '\n')) |line_lf| {
         const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
@@ -162,30 +165,54 @@ pub fn solutionOne(allocator: Allocator) !u32 {
         const lhs_slice = it.next().?;
         const rhs_slice = it.next().?;
 
-        const lhs = into(lhs_slice);
-        const rhs = into(rhs_slice);
+        const lhs = Name.fromSlice(lhs_slice);
+        const rhs = Name.fromSlice(rhs_slice);
 
         var lhs_entry = try connections.getOrPut(lhs);
-        if (!lhs_entry.found_existing) lhs_entry.value_ptr.* = set.ArraySetManaged(u16).init(allocator);
+        if (!lhs_entry.found_existing) lhs_entry.value_ptr.* = set.ArraySetManaged(Name).init(allocator);
         _ = try lhs_entry.value_ptr.add(rhs);
 
         var rhs_entry = try connections.getOrPut(rhs);
-        if (!rhs_entry.found_existing) rhs_entry.value_ptr.* = set.ArraySetManaged(u16).init(allocator);
+        if (!rhs_entry.found_existing) rhs_entry.value_ptr.* = set.ArraySetManaged(Name).init(allocator);
         _ = try rhs_entry.value_ptr.add(lhs);
     }
 
+    return connections;
+}
+
+// Pretty Print Solution
+pub fn ppSolutionOne(writer: anytype, allocator: Allocator) !void {
+    const result = try solutionOne(allocator);
+    try writer.print("number of three-interconnected computers that contain at least one computer starting with a t: {d}\n", .{result});
+}
+
+pub fn solutionOne(allocator: Allocator) !u32 {
+    var arena_impl = std.heap.ArenaAllocator.init(allocator);
+    defer arena_impl.deinit();
+
+    const arena = arena_impl.allocator();
+
+    const file = try std.fs.cwd().openFile("puzzle_input/day23.txt", .{});
+    defer file.close();
+
+    var reader = file.reader();
+
+    var connections = try readInput(arena, &reader);
+    defer connections.deinit();
+
     var count_startswith_t: usize = 0;
 
-    var it = CombinationsIterator(u16).init(arena, connections.keys(), 3);
+    var it = CombinationsIterator(Name).init(arena, connections.keys(), 3);
     while (try it.next(arena)) |combination| {
+        defer arena.free(combination);
         const a = combination[0];
         const b = combination[1];
         const c = combination[2];
 
-        if (startswith(a, 't') or startswith(b, 't') or startswith(c, 't')) {
-            const ab = [_]u16{ a, b };
-            const ac = [_]u16{ a, c };
-            const bc = [_]u16{ b, c };
+        if (a.startsWithScalar('t') or b.startsWithScalar('t') or c.startsWithScalar('t')) {
+            const ab = [_]Name{ a, b };
+            const ac = [_]Name{ a, c };
+            const bc = [_]Name{ b, c };
 
             if (connections.get(a).?.containsAllSlice(&bc) and connections.get(b).?.containsAllSlice(&ac) and connections.get(c).?.containsAllSlice(&ab)) {
                 count_startswith_t += 1;
@@ -196,7 +223,7 @@ pub fn solutionOne(allocator: Allocator) !u32 {
     return @intCast(count_startswith_t);
 }
 
-pub fn allConnected(connections: std.AutoArrayHashMap(u16, set.ArraySetManaged(u16)), items: []u16) bool {
+pub fn allConnected(connections: std.AutoArrayHashMap(Name, set.ArraySetManaged(Name)), items: []Name) bool {
     for (items, 0..) |item, i| {
         const conn = connections.get(item).?;
 
@@ -217,7 +244,6 @@ pub fn solutionTwo(allocator: Allocator) ![]u8 {
     const file = try std.fs.cwd().openFile("puzzle_input/day23.txt", .{});
     defer file.close();
 
-    var buffer: [1024]u8 = undefined;
     var reader = file.reader();
 
     var arena_impl = std.heap.ArenaAllocator.init(allocator);
@@ -225,29 +251,9 @@ pub fn solutionTwo(allocator: Allocator) ![]u8 {
 
     const arena = arena_impl.allocator();
 
-    var connections = std.AutoArrayHashMap(u16, set.ArraySetManaged(u16)).init(arena);
-
-    while (try reader.readUntilDelimiterOrEof(&buffer, '\n')) |line_lf| {
-        const line = std.mem.trim(u8, line_lf, &std.ascii.whitespace);
-        if (line.len == 0) continue;
-
-        var it = std.mem.splitScalar(u8, line, '-');
-        const lhs_slice = it.next().?;
-        const rhs_slice = it.next().?;
-
-        const lhs = into(lhs_slice);
-        const rhs = into(rhs_slice);
-
-        var lhs_entry = try connections.getOrPut(lhs);
-        if (!lhs_entry.found_existing) lhs_entry.value_ptr.* = set.ArraySetManaged(u16).init(allocator);
-        _ = try lhs_entry.value_ptr.add(rhs);
-
-        var rhs_entry = try connections.getOrPut(rhs);
-        if (!rhs_entry.found_existing) rhs_entry.value_ptr.* = set.ArraySetManaged(u16).init(allocator);
-        _ = try rhs_entry.value_ptr.add(lhs);
-    }
-
-    var best: []u16 = &[_]u16{};
+    var connections = try readInput(arena, &reader);
+    defer connections.deinit();
+    var best: []Name = &[_]Name{};
 
     for (connections.keys()) |k| {
         const v = connections.get(k).?;
@@ -261,7 +267,7 @@ pub fn solutionTwo(allocator: Allocator) ![]u8 {
             if (best.len >= sub.len + 1) break;
 
             if (allConnected(connections, sub)) {
-                best = try arena.alloc(u16, sub.len + 1);
+                best = try arena.alloc(Name, sub.len + 1);
                 best[0] = k;
                 @memcpy(best[1..], sub);
                 break;
@@ -269,26 +275,15 @@ pub fn solutionTwo(allocator: Allocator) ![]u8 {
         }
     }
 
-    std.mem.sort(u16, best, {}, struct {
-        fn inner(_: void, lhs: u16, rhs: u16) bool {
-            const lhs_o = out(lhs);
-            const lhs_slice: []const u8 = &[_]u8{ lhs_o.l, lhs_o.r };
-
-            const rhs_o = out(rhs);
-            const rhs_slice: []const u8 = &[_]u8{ rhs_o.l, rhs_o.r };
-
-            return std.mem.order(u8, lhs_slice, rhs_slice) == .lt;
-        }
-    }.inner);
+    std.mem.sort(Name, best, {}, Name.lessThan);
 
     var best_ = std.ArrayList(u8).init(allocator);
     errdefer best_.deinit();
 
     const writer = best_.writer();
 
-    for (best) |b| {
-        const o = out(b);
-        try writer.print("{c}{c},", .{ o.l, o.r });
+    for (best) |n| {
+        try writer.print("{c}{c},", .{ n.l, n.r });
     }
 
     _ = best_.swapRemove(best_.items.len - 1);
